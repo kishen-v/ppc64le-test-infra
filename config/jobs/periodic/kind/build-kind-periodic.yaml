@@ -1,0 +1,43 @@
+periodics:
+  - name: periodic-kind-build-ppc64le
+    labels:
+       preset-image-builder: "true"
+    decorate: true
+    # Scheduled to run every month 1st @ 6AM
+    cron: "0 6 1 * *"
+    spec:
+      containers:
+        - name: docker-builder
+          image: cruizba/ubuntu-dind
+          resources:
+            requests:
+              cpu: "2"
+              memory: "2Gi"
+            limits:
+              cpu: "4"
+              memory: "4Gi"
+          command:
+            - /bin/bash
+            - -c
+            - |
+              /usr/local/bin/start-docker.sh
+              apt-get install git make -y
+
+              git clone -b build-wf https://github.com/kishen-v/kind-image.git
+              pushd kind-image
+              git clone --depth 1 --branch v0.23.0  https://github.com/kubernetes-sigs/kind.git
+              pushd kind
+              git apply ../build-ppc64le.patch
+
+              mkdir -p /root/.docker
+              cat > /root/.docker/config.json << EOL
+                 $DOCKER_CONFIG
+              EOL
+
+              make -C images/local-path-provisioner push
+              make -C images/local-path-helper push
+              make -C images/base push
+              make -C images/kindnetd push
+              make -C images/haproxy push
+          securityContext:
+            privileged: true
